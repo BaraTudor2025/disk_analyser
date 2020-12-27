@@ -110,12 +110,12 @@ int main(int argc, char* argv[]) {
         ASSERT_HAS_ARG(command_arg_pos);
         proc_info(GET_INT_ARG);
 
-
     } else if(IS_COMMAND("-p", "--print")) {
         ASSERT_HAS_ARG(command_arg_pos);
         proc_print(GET_INT_ARG);
 
     } else if(IS_COMMAND("-l", "--list")) {
+        proc_list();
 
     } else if(IS_COMMAND("-p", "--priority")) {
         printf("--priority merge doar cu --add ");

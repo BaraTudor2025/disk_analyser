@@ -8,13 +8,119 @@
 #include <unistd.h>
 #include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 #include <stdio.h>
 
+#define CHECK(...) if((__VA_ARGS__) == -1) { perror(#__VA_ARGS__); exit(-1); }
+
+typedef struct process_id_s {
+    int local_id; // id-ul prin care ne referim la task din comanda ./da
+    int proc_id; // id-ul din sistem
+    char path[128];
+} process_id_t;
+
+static const char* PROC_LIST_FILENAME = ".proc_list";
+static int s_fd; // fd pentru .proc_list
+static int s_proc_num; // number of processes
+static process_id_t s_proc_ids[100]; // lista de procese, maxim 100
+
+typedef struct process_info_s {
+    process_id_t ids;
+    int priority; // 1 la 3
+    int progress; //  0 la 100
+    int status; // preparing | in progress | done
+    //char status[20]; // preparing | in progress | done
+    int files;
+    int dirs;
+} process_info_t;
+
+void read_proc_list(){
+    if(s_fd != 0)
+        return;
+    CHECK(s_fd = open(PROC_LIST_FILENAME, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR));
+    int ret;
+    CHECK(ret = read(s_fd, &s_proc_num, sizeof(s_proc_num)));
+    if(ret == 0){
+        s_proc_num = 0;
+    }
+    else {
+        for(int i = 0; i < s_proc_num; i++){
+            CHECK(read(s_fd, &s_proc_ids[i], sizeof (process_id_t)));
+        }
+    }
+}
+
+void write_proc_list(){
+    if(s_proc_num == 0)
+        return;
+    lseek(s_fd, 0, SEEK_SET);
+    CHECK(write(s_fd, &s_proc_num, sizeof(s_proc_num)));
+    for(int i = 0; i < s_proc_num; i++){
+        CHECK(write(s_fd, &s_proc_ids[i], sizeof (process_id_t)));
+    }
+}
+
+/*
+ *
+ *
+ *
+ */
+
+// TODO cu flock
+void read_proc_info(){
+}
+
+void write_proc_info(){
+}
 
 void proc_add(const char* path, int priority){
+    // TODO verifica daca path-ul este valid
+
+    read_proc_list();
+
+    // mai intai vedem daca exista un task pentru acest path
+    for(int i = 0; i < s_proc_num; i++){
+        if(strcmp(s_proc_ids[i].path, path) == 0){
+            // exista task
+            printf("Directory '%s' is already included in analysis with ID '%d'\n", path, s_proc_ids[i].local_id);
+            return;
+        }
+    }
+
+    pid_t pid = fork();
+    if(pid == 0) { // daemon
+        int fd;
+        char filename[10] = ".task";
+        sprintf(filename+5, "%d", s_proc_num);
+        CHECK(fd = open(filename, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR));
+
+        process_info_t proc_info;
+        memset(&proc_info, 0, sizeof(process_info_t));
+        proc_info.ids.local_id = s_proc_num;
+        proc_info.ids.proc_id = getpid();
+        strcpy(proc_info.ids.path, path);
+        proc_info.priority = priority;
+        proc_info.progress = 0;
+        proc_info.status = 0;
+        proc_info.files = 0;
+        proc_info.dirs = 0;
+        // TODO apel functie de analiza
+        //funcita_alaliza(fd, filename,  proc_info);
+    }
+    else { // parent/main
+        s_proc_ids[s_proc_num].local_id = s_proc_num;
+        s_proc_ids[s_proc_num].proc_id = pid;
+        strcpy(s_proc_ids[s_proc_num].path, path);
+        s_proc_num++;
+        write_proc_list();
+    }
 }
 
 void proc_suspend(int id){
+    read_proc_list();
+    for(int i = 0; i < s_proc_num; i++){
+        printf("local:%d, proc:%d, path:%s\n", s_proc_ids[i].local_id, s_proc_ids[i].proc_id, s_proc_ids[i].path);
+    }
 }
 
 void proc_resume(int id){

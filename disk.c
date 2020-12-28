@@ -1,5 +1,4 @@
 #include "disk.h"
-
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/stat.h>
@@ -10,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <dirent.h>
 
 #define CHECK(...) if((__VA_ARGS__) == -1) { perror(#__VA_ARGS__); exit(-1); }
 
@@ -136,6 +136,35 @@ void proc_print(int id){
 }
 
 void proc_list(){
+    check_file("../disk_analyser");
+}
+
+struct dirent dent;
+
+void search_folder(const char* global_path, const char* local_path){
+    struct dirent *dent;
+    int dir_count = 0;
+    DIR* srcdir = opendir(local_path);
+    if(!srcdir){
+        perror("opendir");
+        return -1;
+    }
+    while((dent = readdir(srcdir)) == 0){
+        struct stat dir_stat;
+        // Folosim 'fstatat' in loc de 'stat' deoarece avem de a face cu folder 
+        if(fstatat(dirfd(srcdir), dent->d_name, &dir_stat,0) < 0){
+            perror(dent->d_name);
+            return -1;
+        }
+    }
+    //if(local_path == global_path)
+        
+}
+
+void check_file(const char* path){
+    struct stat stats;
+    if(!stat(path, &stats))
+        printf("The size of the folder is: %ld \n", stats.st_size);
 }
 
 

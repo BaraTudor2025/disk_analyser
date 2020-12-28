@@ -1,5 +1,7 @@
 #include "disk.h"
 #include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 static const char* s_help_options =
 "Accepta o singura comanda, cu exceptia lui --priority\n"
@@ -14,7 +16,6 @@ static const char* s_help_options =
 "-l, --list         list all analysis tasks, with their ID and the corresponding root path\n"
 "-p, --print <id>   print analysis report for those tasks that are \"done\"\n";
 
-
 /* enum command { */
 /*     C_ADD, C_SUSPEND, C_RESUME, C_REMOVE, C_INFO, C_LIST, C_PRINT */
 /* }; */
@@ -25,33 +26,6 @@ static const char* s_help_options =
 /*     int id; */
 /*     int priority; */
 /* }command_t; */
-
-struct ceva_struct_pentru_lista_de_procese_nush{
-
-};
-
-// poate functiile proc_* tre puse in .h si .c ca sa lasam main-ul in pace
-void proc_add(const char* path, int priority){
-}
-
-void proc_suspend(int id){
-}
-
-void proc_resume(int id){
-}
-
-void proc_remove(int id){
-}
-
-void proc_info(int id){
-}
-
-void proc_print(int id){
-}
-
-void proc_list(){
-}
-
 
 int main(int argc, char* argv[]) {
 

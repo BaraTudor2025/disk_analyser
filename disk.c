@@ -135,13 +135,17 @@ void proc_info(int id){
 void proc_print(int id){
 }
 
+int search_folder(const char* global_path, const char* local_path, const char* dirname, long long prev_folder_size);
 void proc_list(){
-    check_file("../disk_analyser");
+    //check_file("../disk_analyser");
+    search_folder("../disk_analyser","../disk_analyser", "",0);
 }
 
-struct dirent dent;
+//struct dirent dent;
 
-void search_folder(const char* global_path, const char* local_path){
+/// Cauta recursiv pornind de la 'global_path'
+int search_folder(const char* global_path, const char* local_path, const char* dirname, long long prev_folder_size){
+    
     struct dirent *dent;
     int dir_count = 0;
     DIR* srcdir = opendir(local_path);
@@ -149,16 +153,40 @@ void search_folder(const char* global_path, const char* local_path){
         perror("opendir");
         return -1;
     }
-    while((dent = readdir(srcdir)) == 0){
+    while((dent = readdir(srcdir)) != 0){
         struct stat dir_stat;
+
+        if(dent->d_name[0] == '.')
+            continue;
+
         // Folosim 'fstatat' in loc de 'stat' deoarece avem de a face cu folder 
         if(fstatat(dirfd(srcdir), dent->d_name, &dir_stat,0) < 0){
             perror(dent->d_name);
-            return -1;
+            continue;
+        }
+        char relative_path[256];
+        strcpy(relative_path, dirname);
+        strcat(relative_path,"/");
+        strcat(relative_path,dent->d_name);
+        if(S_ISDIR(dir_stat.st_mode)){
+            if(!strcmp(global_path,local_path)){
+                printf("Path    Usage   Size    Amount\n");
+                printf("%s 100%% %ld\n",global_path,dir_stat.st_size);
+                printf("|\n");
+            }
+            else{
+                long int current_percentage = (dir_stat.st_size/prev_folder_size)*100;
+                printf("|-/%s %ld%% %ld \n",relative_path, current_percentage ,dir_stat.st_size);
+            }
+            dir_count++;
+            char next_folder[128];
+            strcpy(next_folder,local_path);
+            strcat(next_folder,"/");
+            strcat(next_folder,dent->d_name);
+            search_folder(global_path, next_folder,dent->d_name,dir_stat.st_size);
         }
     }
-    //if(local_path == global_path)
-        
+    closedir(srcdir);
 }
 
 void check_file(const char* path){

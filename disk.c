@@ -29,7 +29,8 @@ typedef struct process_id_s {
     char filename[20];  // file asociat cu task-ul in care se scrie process_info_t
 } process_id_t;
 
-static const char* PROC_LIST_FILENAME = "/tmp/da_proc_list";
+static const char* PROC_LIST_FILENAME = ".proc_list";
+//static const char* PROC_LIST_FILENAME = "/tmp/da_proc_list";
 static int s_fd; // fd pentru .proc_list
 static int s_proc_num; // number of processes
 static process_id_t s_proc_ids[100]; // lista de procese, maxim 100
@@ -51,6 +52,7 @@ typedef struct process_info_s {
 } process_info_t;
 
 void check_file(const char*);
+int search_folder(const char* global_path, const char* local_path, const char* dirname, long long prev_folder_size);
 
 // populeaza s_proc_ids
 void read_proc_list(){
@@ -83,17 +85,17 @@ process_id_t* find_process_id(int id){
     for(int i = 0; i < s_proc_num; i++)
         if(s_proc_ids[i].proc_id == id)
             return &s_proc_ids[i];
-    if(ids == NULL){
-        printf("Nu exista task-ul cu ID '%d'\n", id);
-        exit(-1);
-    }
+    printf("Nu exista task-ul cu ID '%d'\n", id);
+    exit(-1);
 }
 
 void set_task_filename(char* filename, int id){
-    strcpy(filename, "/tmp/da_task");
+    strcpy(filename, ".task");
     sprintf(filename+5, "%d", id);
 }
 
+
+// flock folosit pentru sincronizarea dintre procesul task si procesul main care interogheaza
 int read_proc_info_lock(char* filename, process_info_t* info){
     int fd;
     CHECK(fd = open(filename, O_RDONLY));
@@ -107,7 +109,6 @@ void close_and_unlock(int fd){
     CHECK(close(fd));
 }
 
-// flock folosit pentru sincronizarea dintre procesul task si procesul main care interogheaza
 void read_proc_info(char* filename, process_info_t* info){
     int fd = read_proc_info_lock(filename, info);
     close_and_unlock(fd);
@@ -233,6 +234,10 @@ void proc_remove(int id){
     read_proc_list();
     process_id_t* ids = find_process_id(id);
 
+    process_info_t info;
+    int fd = open(ids->filename, O_RDONLY);
+    CHECK(read(fd, &info, sizeof(info)));
+
     switch(info.status)
     {
     case STATUS_PENDING:
@@ -254,12 +259,12 @@ void proc_print(int id){
 }
 
 void proc_list(){
-    check_file("../disk_analyser");
+    //check_file("../disk_analyser");
 }
 
-struct dirent dent;
+/// Cauta recursiv pornind de la 'global_path'
+int search_folder(const char* global_path, const char* local_path, const char* dirname, long long prev_folder_size){
 
-void search_folder(const char* global_path, const char* local_path){
     struct dirent *dent;
     int dir_count = 0;
     DIR* srcdir = opendir(local_path);
@@ -267,16 +272,40 @@ void search_folder(const char* global_path, const char* local_path){
         perror("opendir");
         return -1;
     }
-    while((dent = readdir(srcdir)) == 0){
+    while((dent = readdir(srcdir)) != 0){
         struct stat dir_stat;
+
+        if(dent->d_name[0] == '.')
+            continue;
+
         // Folosim 'fstatat' in loc de 'stat' deoarece avem de a face cu folder
         if(fstatat(dirfd(srcdir), dent->d_name, &dir_stat,0) < 0){
             perror(dent->d_name);
-            return -1;
+            continue;
+        }
+        char relative_path[256];
+        strcpy(relative_path, dirname);
+        strcat(relative_path,"/");
+        strcat(relative_path,dent->d_name);
+        if(S_ISDIR(dir_stat.st_mode)){
+            if(!strcmp(global_path,local_path)){
+                printf("Path    Usage   Size    Amount\n");
+                printf("%s 100%% %ld\n",global_path,dir_stat.st_size);
+                printf("|\n");
+            }
+            else{
+                long int current_percentage = (dir_stat.st_size/prev_folder_size)*100;
+                printf("|-/%s %ld%% %ld \n",relative_path, current_percentage ,dir_stat.st_size);
+            }
+            dir_count++;
+            char next_folder[128];
+            strcpy(next_folder,local_path);
+            strcat(next_folder,"/");
+            strcat(next_folder,dent->d_name);
+            search_folder(global_path, next_folder,dent->d_name,dir_stat.st_size);
         }
     }
-    //if(local_path == global_path)
-
+    closedir(srcdir);
 }
 
 void check_file(const char* path){
@@ -284,7 +313,5 @@ void check_file(const char* path){
     if(!stat(path, &stats))
         printf("The size of the folder is: %ld \n", stats.st_size);
 }
-
-
 
 

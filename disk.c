@@ -33,7 +33,7 @@ static const char* PROC_LIST_FILENAME = ".proc_list";
 //static const char* PROC_LIST_FILENAME = "/tmp/da_proc_list";
 static int s_fd; // fd pentru .proc_list
 static int s_proc_num; // number of processes
-static process_id_t s_proc_ids[100]; // lista de procese, maxim 100
+static process_id_t s_proc_list[100]; // lista de procese, maxim 100
 
 enum status {
     STATUS_PENDING,
@@ -66,7 +66,7 @@ void read_proc_list(){
     }
     else {
         for(int i = 0; i < s_proc_num; i++){
-            CHECK(read(s_fd, &s_proc_ids[i], sizeof (process_id_t)));
+            CHECK(read(s_fd, &s_proc_list[i], sizeof (process_id_t)));
         }
     }
 }
@@ -77,14 +77,14 @@ void write_proc_list(){
     lseek(s_fd, 0, SEEK_SET);
     CHECK(write(s_fd, &s_proc_num, sizeof(s_proc_num)));
     for(int i = 0; i < s_proc_num; i++){
-        CHECK(write(s_fd, &s_proc_ids[i], sizeof (process_id_t)));
+        CHECK(write(s_fd, &s_proc_list[i], sizeof (process_id_t)));
     }
 }
 
 process_id_t* find_process_id(int id){
     for(int i = 0; i < s_proc_num; i++)
-        if(s_proc_ids[i].proc_id == id)
-            return &s_proc_ids[i];
+        if(s_proc_list[i].proc_id == id)
+            return &s_proc_list[i];
     printf("Nu exista task-ul cu ID '%d'\n", id);
     exit(-1);
 }
@@ -93,7 +93,6 @@ void set_task_filename(char* filename, int id){
     strcpy(filename, ".task");
     sprintf(filename+5, "%d", id);
 }
-
 
 // flock folosit pentru sincronizarea dintre procesul task si procesul main care interogheaza
 int read_proc_info_lock(char* filename, process_info_t* info){
@@ -145,9 +144,9 @@ void proc_add(const char* path, int priority){
     // mai intai vedem daca exista un task pentru acest path
     for(int i = 0; i < s_proc_num; i++){
         // TODO vezi daca este inclus in alt directory, un fel de 'bool is_prefix()'
-        if(strcmp(s_proc_ids[i].path, path) == 0){
+        if(strcmp(s_proc_list[i].path, path) == 0){
             // exista task
-            printf("Directory '%s' is already included in analysis with ID '%d'\n", path, s_proc_ids[i].proc_id);
+            printf("Directory '%s' is already included in analysis with ID '%d'\n", path, s_proc_list[i].proc_id);
             return;
         }
     }
@@ -173,9 +172,9 @@ void proc_add(const char* path, int priority){
         //funcita_alaliza(fd, filename,  proc_info);
     }
     else { // parent/main
-        s_proc_ids[s_proc_num].proc_id = pid;
-        strcpy(s_proc_ids[s_proc_num].path, path);
-        set_task_filename(s_proc_ids[s_proc_num].filename, pid);
+        s_proc_list[s_proc_num].proc_id = pid;
+        strcpy(s_proc_list[s_proc_num].path, path);
+        set_task_filename(s_proc_list[s_proc_num].filename, pid);
         s_proc_num++;
         write_proc_list();
     }
@@ -259,6 +258,11 @@ void proc_print(int id){
 }
 
 void proc_list(){
+    read_proc_list();
+    for(int i=0; i<s_proc_num; i++){
+        process_id_t* ids = &s_proc_list[i];
+        printf("ids->proc_id=%d ids->path=%s ids->filename=%s\n", ids->proc_id, ids->path, ids->filename);
+    }
     //check_file("../disk_analyser");
 }
 

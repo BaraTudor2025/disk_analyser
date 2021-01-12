@@ -136,20 +136,32 @@ void write_proc_info(char* filename, const process_info_t* info){
     /* lock.l_type = F_UNLCK; */
     /* CHECK(fcntl(fd, F_SETLK, &lock)); */
 
-void proc_add(const char* path, int priority){
-    // TODO verifica daca path-ul este valid
-
-    read_proc_list();
-
-    // mai intai vedem daca exista un task pentru acest path
-    for(int i = 0; i < s_proc_num; i++){
-        // TODO vezi daca este inclus in alt directory, un fel de 'bool is_prefix()'
-        if(strcmp(s_proc_list[i].path, path) == 0){
-            // exista task
-            printf("Directory '%s' is already included in analysis with ID '%d'\n", path, s_proc_list[i].proc_id);
-            return;
-        }
+void proc_add(const char* p, int priority){
+   
+   //deoarece malloc aloca memorie nu trebuie dat free, programul da exit rapid
+   char *path=realpath(p, NULL);
+    if (path == NULL)
+    {
+    	printf("Nu exista fisierul\n");
+    	return;
     }
+    read_proc_list();
+    
+    // mai intai vedem daca exista un task pentru acest path
+
+    for(int i = 0; i < s_proc_num; i++)
+    {
+
+        	
+            if(strstr(path, s_proc_list[i].path) != NULL)
+            {
+                // exista task
+                printf("Directory '%s' is already included in analysis with ID '%d'\n", path, s_proc_list[i].proc_id);
+                return;
+            }
+
+    }
+    
 
     pid_t pid = fork();
     if(pid == 0) { // daemon

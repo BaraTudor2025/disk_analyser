@@ -42,7 +42,7 @@ enum status {
 };
 
 typedef struct process_data_s {
-    process_info_t ids;
+    process_info_t info;
     int priority; // 1 la 3
     int progress; //  0 la 100
     enum status status; // pending | in progress | done
@@ -159,19 +159,19 @@ void proc_add(const char* p, int priority){
     if(pid == 0) { // daemon
         process_data_t proc_data;
         memset(&proc_data, 0, sizeof(process_data_t));
-        proc_data.ids.proc_id = getpid();
-        set_task_filename(proc_data.ids.filename, getpid());
-        strcpy(proc_data.ids.path, path);
+        proc_data.info.proc_id = getpid();
+        set_task_filename(proc_data.info.filename, getpid());
+        strcpy(proc_data.info.path, path);
         proc_data.priority = priority;
         proc_data.progress = STATUS_PROGRESS;
         proc_data.status = 0;
         proc_data.files = 0;
         proc_data.dirs = 0;
-        setpriority(PRIO_PROCESS, proc_data.ids.proc_id, proc_data.priority);
+        setpriority(PRIO_PROCESS, proc_data.info.proc_id, proc_data.priority);
         int fd;
-        CHECK(fd = creat(proc_data.ids.filename, S_IRUSR | S_IWUSR));
+        CHECK(fd = creat(proc_data.info.filename, S_IRUSR | S_IWUSR));
         CHECK(close(fd));
-        write_proc_info(proc_data.ids.filename, &proc_data);
+        write_proc_info(proc_data.info.filename, &proc_data);
         // TODO apel functie de analiza
         //funcita_alaliza(fd, filename,  proc_info);
     }

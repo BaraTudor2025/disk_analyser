@@ -25,13 +25,8 @@ void report_and_exit(const char* msg){
 
 typedef struct process_info_s {
     int proc_id;        // id-ul din sistem
-<<<<<<< HEAD
-    char path[128];     // path de analizat (global)
-    char filename[20];  // file asociat cu task-ul in care se scrie process_data_t
-=======
     char path[128];     // path de analizat
     char filename[32];  // file asociat cu task-ul in care se scrie process_data_t
->>>>>>> cbba71eaf4ebb1f8b6abd6e2aaa2e1b0c425bf86
 } process_info_t;
 
 
@@ -53,15 +48,9 @@ typedef struct process_data_s {
     int priority; // 1 la 3
     int progress; //  0 la 100
     enum status status; // pending | in progress | done
-<<<<<<< HEAD
-    int files; // nr de fisiere
-    int dirs; // nr de foldere
-    int message_len;
-=======
     int files;
     int dirs;
     int line_num; // numarul de linii pe care il contine mesajul afisat prin --print <id>
->>>>>>> cbba71eaf4ebb1f8b6abd6e2aaa2e1b0c425bf86
 } process_data_t;
 
 int search_folder(
@@ -296,15 +285,6 @@ void proc_info(int id){
 }
 
 void proc_print(int id){
-<<<<<<< HEAD
-    struct process_data_s data;
-    search_folder("test","test","",0,&data,1);
-}
-
-void proc_list(){
-
-    read_proc_list();
-=======
     read_proc_info_list();
     process_info_t* info = find_process_info(id);
 
@@ -326,7 +306,6 @@ void proc_list(){
 
 void proc_list(){
     read_proc_info_list();
->>>>>>> cbba71eaf4ebb1f8b6abd6e2aaa2e1b0c425bf86
     for(int i=0; i<s_proc_num; i++){
         process_info_t* info = &s_proc_list[i];
         process_data_t data;

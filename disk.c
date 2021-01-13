@@ -14,9 +14,9 @@
 #include <string.h>
 #include <stdio.h>
 #include <dirent.h>
+#include <stdarg.h>
 
-//#define CHECK(...) if((__VA_ARGS__) == -1) { perror(#__VA_ARGS__); exit(-1); }
-#define CHECK(...) if((__VA_ARGS__) == -1) report_and_exit(#__VA_ARGS__);
+#define CHECK(...) if((__VA_ARGS__) < 0) report_and_exit(#__VA_ARGS__);
 
 void report_and_exit(const char* msg){
     perror(msg);
@@ -26,10 +26,12 @@ void report_and_exit(const char* msg){
 typedef struct process_info_s {
     int proc_id;        // id-ul din sistem
     char path[128];     // path de analizat
-    char filename[20];  // file asociat cu task-ul in care se scrie process_data_t
+    char filename[32];  // file asociat cu task-ul in care se scrie process_data_t
 } process_info_t;
 
-static const char* PROC_LIST_FILENAME = "~/.proc_list_cache";
+
+// in 2 locuti mai trebuie updatat daca se schimba dir-ul: read_proc_list si set_task_filenam
+static const char* PROC_LIST_FILENAME = "~/.da_cache_d/.proc_list";
 //static const char* PROC_LIST_FILENAME = "/tmp/da_proc_list";
 static int s_fd; // fd pentru PROC_LIST_FILENAME
 static int s_proc_num; // number of processes
@@ -48,15 +50,14 @@ typedef struct process_data_s {
     enum status status; // pending | in progress | done
     int files;
     int dirs;
-    int message_len;
+    int line_num; // numarul de linii pe care il contine mesajul afisat prin --print <id>
 } process_data_t;
 
 int search_folder(const char* global_path, const char* local_path, const char* dirname, long long prev_folder_size);
 
 // populeaza s_proc_ids
 void read_proc_info_list(){
-    if(s_fd != 0)
-        return;
+    mkdir("~/.da_cache_d", S_IRUSR | S_IWUSR); // nu-l face de doua ori, daca exista atunci ret==-1
     CHECK(s_fd = open(PROC_LIST_FILENAME, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR));
     int read_bytes;
     CHECK(read_bytes = read(s_fd, &s_proc_num, sizeof(s_proc_num)));
@@ -89,8 +90,9 @@ process_info_t* find_process_info(int id){
 }
 
 void set_task_filename(char* filename, int id){
-    strcpy(filename, ".task");
-    sprintf(filename+5, "%d", id);
+    const char* prefix = "~/.da_cache_d/.task";
+    strcpy(filename, prefix);
+    sprintf(filename + strlen(prefix), "%d", id);
 }
 
 // flock folosit pentru sincronizarea dintre procesul task si procesul main care interogheaza
@@ -119,21 +121,6 @@ void write_proc_data(char* filename, const process_data_t* data){
     CHECK(write(fd, data, sizeof(process_data_t)));
     close_and_unlock(fd);
 }
-
-    /* struct flock lock; */
-    /* lock.l_type = F_RDLCK; */
-    /* //lock.l_type = F_WRLCK; */
-    /* lock.l_whence = SEEK_SET; */
-    /* lock.l_start = 0; */
-    /* lock.l_len = 0; */
-    /* lock.pid = getpid(); */
-    /* //CHECK(fcntl(fd, F_SETLKW, &lock)); */
-    /* CHECK(fcntl(fd, F_SETLKW, &lock)); */
-    /*  */
-    /* CHECK(read(fd, info, sizeof(process_data_t))); */
-    /*  */
-    /* lock.l_type = F_UNLCK; */
-    /* CHECK(fcntl(fd, F_SETLK, &lock)); */
 
 void proc_add(const char* p, int priority){
 
@@ -175,6 +162,7 @@ void proc_add(const char* p, int priority){
         // TODO apel functie de analiza
         //search_folder()
     }
+
     else { // parent/main
         s_proc_list[s_proc_num].proc_id = pid;
         strcpy(s_proc_list[s_proc_num].path, path);
@@ -195,6 +183,7 @@ void proc_suspend(int id){
     case STATUS_PENDING:
         printf("Task already suspended for '%s'\n", info->path);
         break;
+
     case STATUS_PROGRESS:
         CHECK(kill(info->proc_id, SIGSTOP));
         printf("Suspending task for '%s'\n", info->path);
@@ -230,6 +219,7 @@ void proc_resume(int id){
         printf("\n");
         break;
     }
+
 }
 
 void proc_remove(int id){
@@ -253,6 +243,7 @@ void proc_remove(int id){
                 break;
             }
         }
+
         for(int i = index; i < s_proc_num - 1; i++){
             s_proc_list[i].proc_id = s_proc_list[i++].proc_id;
             strcpy(s_proc_list[i].path, s_proc_list[i++].path);
@@ -266,7 +257,7 @@ void proc_remove(int id){
 
 void proc_info(int id){
 	read_proc_info_list();
-	process_info_t* info = find_process_id(id);
+	process_info_t* info = find_process_info(id);
 
 	process_data_t data;
     int fd = read_proc_data_lock(info->filename, &data);
@@ -284,11 +275,26 @@ void proc_info(int id){
     	printf("Statusul analizei este done\n");
     }
     close_and_unlock(fd);
-
-
 }
 
 void proc_print(int id){
+    read_proc_info_list();
+    process_info_t* info = find_process_info(id);
+
+    process_data_t data;
+    int fd = read_proc_data_lock(info->filename, &data);
+    if(data.status == STATUS_DONE){
+        char buff[1024];
+        size_t len = 1024;
+        FILE* fp = fdopen(fd, "a");
+        for(int i = 0; i < data.line_num; i++){
+            //CHECK(getdelim(&buff, &len, '\n', fp));
+            //fgets(buff, sizeof(buff));
+            if(getline(&buff, &len, fp) > 0)
+                printf("%s", buff);
+        }
+    }
+    close_and_unlock(fd);
 }
 
 void proc_list(){
@@ -301,6 +307,23 @@ void proc_list(){
         close_and_unlock (fd);
     }
 }
+
+// pt FLORIAN: folosesti functia asta in loc de printf
+// IMPORTANT, cand o apelezi sa scrii un rand intreg, adica sa aiba fmt-ul un '\n'; desi din cate vad deja faci asta
+void write_proc_data_message(process_data_t* data, char* fmt, ...){
+    va_list args;
+    va_start(args, fmt);
+    int fd = open(data->info.filename, O_WRONLY | O_APPEND);
+    CHECK(flock(fd, LOCK_EX));
+    FILE* fp = fdopen(fd, "a");
+    vfprintf(fp, fmt, args);
+    CHECK(flock(fd, LOCK_UN));
+    CHECK(fclose(fp));
+    //CHECK(close(fd));
+    va_end(args);
+    data->line_num++;
+}
+
 
 /// Cauta recursiv pornind de la 'global_path'
 int search_folder(const char* global_path, const char* local_path, const char* dirname, long long prev_folder_size){

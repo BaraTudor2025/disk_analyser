@@ -265,6 +265,27 @@ void proc_remove(int id){
 }
 
 void proc_info(int id){
+	read_proc_info_list();
+	process_info_t* info = find_process_id(id);
+
+	process_data_t data;
+    int fd = read_proc_data_lock(info->filename, &data);
+
+    if (data.status == 0 )
+    {
+    	printf("Statusul analizei este pending\n");
+    }
+    if (data.status == 1 )
+    {
+    	printf("Statusul analizei  este progress\n");
+    }
+    if (data.status == 2 )
+    {
+    	printf("Statusul analizei este done\n");
+    }
+    close_and_unlock(fd);
+
+
 }
 
 void proc_print(int id){
@@ -274,7 +295,10 @@ void proc_list(){
     read_proc_info_list();
     for(int i=0; i<s_proc_num; i++){
         process_info_t* info = &s_proc_list[i];
-        printf("id=%d path=%s file=%s\n", info->proc_id, info->path, info->filename);
+        process_data_t data;
+    	int fd = read_proc_data_lock(info->filename, &data);
+        printf("id=%d path=%s progress=%d percent %d files %d dirs\n", info->proc_id, info->path, data.progress, data.files, data.dirs);
+        close_and_unlock (fd);
     }
 }
 

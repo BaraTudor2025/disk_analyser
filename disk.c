@@ -54,7 +54,7 @@ typedef struct process_data_s {
 int search_folder(const char* global_path, const char* local_path, const char* dirname, long long prev_folder_size);
 
 // populeaza s_proc_ids
-void read_proc_list(){
+void read_proc_info_list(){
     if(s_fd != 0)
         return;
     CHECK(s_fd = open(PROC_LIST_FILENAME, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR));
@@ -70,7 +70,7 @@ void read_proc_list(){
     }
 }
 
-void write_proc_list(){
+void write_proc_info_list(){
     if(s_proc_num == 0)
         return;
     lseek(s_fd, 0, SEEK_SET);
@@ -94,11 +94,11 @@ void set_task_filename(char* filename, int id){
 }
 
 // flock folosit pentru sincronizarea dintre procesul task si procesul main care interogheaza
-int read_proc_info_lock(char* filename, process_data_t* info){
+int read_proc_data_lock(char* filename, process_data_t* data){
     int fd;
     CHECK(fd = open(filename, O_RDONLY));
     CHECK(flock(fd, LOCK_SH));
-    CHECK(read(fd, info, sizeof(process_data_t)));
+    CHECK(read(fd, data, sizeof(process_data_t)));
     return fd;
 }
 
@@ -107,16 +107,16 @@ void close_and_unlock(int fd){
     CHECK(close(fd));
 }
 
-void read_proc_info(char* filename, process_data_t* info){
-    int fd = read_proc_info_lock(filename, info);
+void read_proc_data(char* filename, process_data_t* data){
+    int fd = read_proc_data_lock(filename, data);
     close_and_unlock(fd);
 }
 
-void write_proc_info(char* filename, const process_data_t* info){
+void write_proc_data(char* filename, const process_data_t* data){
     int fd;
     CHECK(fd = open(filename, O_WRONLY));
     CHECK(flock(fd, LOCK_EX));
-    CHECK(write(fd, info, sizeof(process_data_t)));
+    CHECK(write(fd, data, sizeof(process_data_t)));
     close_and_unlock(fd);
 }
 
@@ -144,7 +144,7 @@ void proc_add(const char* p, int priority){
     	printf("Nu exista fisierul\n");
     	return;
     }
-    read_proc_list();
+    read_proc_info_list();
 
     // mai intai vedem daca exista un task pentru acest path
     for(int i = 0; i < s_proc_num; i++) {
@@ -171,7 +171,7 @@ void proc_add(const char* p, int priority){
         int fd;
         CHECK(fd = creat(proc_data.info.filename, S_IRUSR | S_IWUSR));
         CHECK(close(fd));
-        write_proc_info(proc_data.info.filename, &proc_data);
+        write_proc_data(proc_data.info.filename, &proc_data);
         // TODO apel functie de analiza
         //funcita_alaliza(fd, filename,  proc_info);
     }
@@ -180,15 +180,15 @@ void proc_add(const char* p, int priority){
         strcpy(s_proc_list[s_proc_num].path, path);
         set_task_filename(s_proc_list[s_proc_num].filename, pid);
         s_proc_num++;
-        write_proc_list();
+        write_proc_info_list();
     }
 }
 
 void proc_suspend(int id){
-    read_proc_list();
+    read_proc_info_list();
     process_info_t* info = find_process_id(id);
     process_data_t data;
-    int fd = read_proc_info_lock(info->filename, &data);
+    int fd = read_proc_data_lock(info->filename, &data);
 
     switch(data.status)
     {
@@ -209,7 +209,7 @@ void proc_suspend(int id){
 }
 
 void proc_resume(int id){
-    read_proc_list();
+    read_proc_info_list();
     process_info_t* info = find_process_id(id);
     process_data_t data;
     int fd = open(info->filename, O_RDONLY);
@@ -233,7 +233,7 @@ void proc_resume(int id){
 }
 
 void proc_remove(int id){
-    read_proc_list();
+    read_proc_info_list();
     process_info_t* info = find_process_id(id);
     process_data_t data;
     int fd = open(info->filename, O_RDONLY);
@@ -248,7 +248,7 @@ void proc_remove(int id){
         unlink(info->filename);
         // TODO remove din array s_proc_ids/list
         //for(int i = 0; )
-        write_proc_list();
+        write_proc_info_list();
     }
     printf("\n");
 }
@@ -260,7 +260,7 @@ void proc_print(int id){
 }
 
 void proc_list(){
-    read_proc_list();
+    read_proc_info_list();
     for(int i=0; i<s_proc_num; i++){
         process_info_t* info = &s_proc_list[i];
         printf("id=%d path=%s file=%s\n", info->proc_id, info->path, info->filename);

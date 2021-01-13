@@ -29,9 +29,9 @@ typedef struct process_info_s {
     char filename[20];  // file asociat cu task-ul in care se scrie process_data_t
 } process_info_t;
 
-static const char* PROC_LIST_FILENAME = ".proc_list";
+static const char* PROC_LIST_FILENAME = "~/.proc_list_cache";
 //static const char* PROC_LIST_FILENAME = "/tmp/da_proc_list";
-static int s_fd; // fd pentru .proc_list
+static int s_fd; // fd pentru PROC_LIST_FILENAME
 static int s_proc_num; // number of processes
 static process_info_t s_proc_list[100]; // lista de procese, maxim 100
 
@@ -58,9 +58,9 @@ void read_proc_info_list(){
     if(s_fd != 0)
         return;
     CHECK(s_fd = open(PROC_LIST_FILENAME, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR));
-    int ret;
-    CHECK(ret = read(s_fd, &s_proc_num, sizeof(s_proc_num)));
-    if(ret == 0){
+    int read_bytes;
+    CHECK(read_bytes = read(s_fd, &s_proc_num, sizeof(s_proc_num)));
+    if(read_bytes == 0){
         s_proc_num = 0;
     }
     else {
@@ -80,7 +80,7 @@ void write_proc_info_list(){
     }
 }
 
-process_info_t* find_process_id(int id){
+process_info_t* find_process_info(int id){
     for(int i = 0; i < s_proc_num; i++)
         if(s_proc_list[i].proc_id == id)
             return &s_proc_list[i];
@@ -173,7 +173,7 @@ void proc_add(const char* p, int priority){
         CHECK(close(fd));
         write_proc_data(proc_data.info.filename, &proc_data);
         // TODO apel functie de analiza
-        //funcita_alaliza(fd, filename,  proc_info);
+        //search_folder()
     }
     else { // parent/main
         s_proc_list[s_proc_num].proc_id = pid;
@@ -186,7 +186,7 @@ void proc_add(const char* p, int priority){
 
 void proc_suspend(int id){
     read_proc_info_list();
-    process_info_t* info = find_process_id(id);
+    process_info_t* info = find_process_info(id);
     process_data_t data;
     int fd = read_proc_data_lock(info->filename, &data);
 
@@ -210,7 +210,7 @@ void proc_suspend(int id){
 
 void proc_resume(int id){
     read_proc_info_list();
-    process_info_t* info = find_process_id(id);
+    process_info_t* info = find_process_info(id);
     process_data_t data;
     int fd = open(info->filename, O_RDONLY);
     CHECK(read(fd, &data, sizeof(data)));
@@ -234,7 +234,7 @@ void proc_resume(int id){
 
 void proc_remove(int id){
     read_proc_info_list();
-    process_info_t* info = find_process_id(id);
+    process_info_t* info = find_process_info(id);
     process_data_t data;
     int fd = open(info->filename, O_RDONLY);
     CHECK(read(fd, &data, sizeof(data)));
@@ -246,8 +246,19 @@ void proc_remove(int id){
         kill(info->proc_id, SIGTERM);
     case STATUS_DONE:
         unlink(info->filename);
-        // TODO remove din array s_proc_ids/list
-        //for(int i = 0; )
+        int index = 0;
+        for(int i = 0; i < s_proc_num; i++){
+            if(info->proc_id == id){
+                index = i;
+                break;
+            }
+        }
+        for(int i = index; i < s_proc_num - 1; i++){
+            s_proc_list[i].proc_id = s_proc_list[i++].proc_id;
+            strcpy(s_proc_list[i].path, s_proc_list[i++].path);
+            strcpy(s_proc_list[i].filename, s_proc_list[i++].filename);
+        }
+        s_proc_num -= 1;
         write_proc_info_list();
     }
     printf("\n");

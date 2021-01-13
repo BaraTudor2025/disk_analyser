@@ -286,7 +286,7 @@ void proc_print(int id){
     if(data.status == STATUS_DONE){
         char buff[1024];
         size_t len = 1024;
-        FILE* fp = fdopen(fd, "a");
+        FILE* fp = fdopen(fd, "r");
         for(int i = 0; i < data.line_num; i++){
             //CHECK(getdelim(&buff, &len, '\n', fp));
             //fgets(buff, sizeof(buff));

@@ -54,7 +54,6 @@ typedef struct process_data_s {
 } process_data_t;
 
 int search_folder(
-    const char* global_path, 
     const char* local_path, 
     const char* dirname, 
     long long prev_folder_size, 
@@ -284,24 +283,87 @@ void proc_info(int id){
     close_and_unlock(fd);
 }
 
-void proc_print(int id){
-    read_proc_info_list();
-    process_info_t* info = find_process_info(id);
+long long count_path_size(const char* local_path){
+    struct dirent *dent;
+    DIR* srcdir = opendir(local_path);
+    if(!srcdir){
+        perror("opendir");
+        return -1;
+    }
+    int this_dir_size = 0;
+    // char* next_folder = malloc(256);
+    while((dent = readdir(srcdir)) != 0){
+        // memset(next_folder,256,0);
+        //printf("%s\n",dent->d_name);
+        struct stat dir_stat;
+        if((strcmp(dent->d_name,".") == 0) || (strcmp(dent->d_name, "..") == 0))
+            continue;
 
-    process_data_t data;
-    int fd = read_proc_data_lock(info->filename, &data);
-    if(data.status == STATUS_DONE){
-        char buff[1024];
-        size_t len = 1024;
-        FILE* fp = fdopen(fd, "r");
-        for(int i = 0; i < data.line_num; i++){
-            //CHECK(getdelim(&buff, &len, '\n', fp));
-            //fgets(buff, sizeof(buff));
-            if(getline(&buff, &len, fp) > 0)
-                printf("%s", buff);
+        // Folosim 'fstatat' in loc de 'stat' deoarece avem de a face cu folder
+        if(fstatat(dirfd(srcdir), dent->d_name, &dir_stat,0) < 0){
+            perror(dent->d_name);
+            continue;
+        }
+        
+        if(S_ISDIR(dir_stat.st_mode)){
+            char next_folder[256];
+            strcpy(next_folder,local_path);
+            strcat(next_folder,"/");
+            strcat(next_folder,dent->d_name);
+            this_dir_size += count_path_size(next_folder);
+        }
+        else{
+            this_dir_size += dir_stat.st_size;
         }
     }
-    close_and_unlock(fd);
+    // free(next_folder);
+    closedir(srcdir);
+    return this_dir_size;
+}
+
+// Afiseaza headerul procesului si returneaza dimensiunea folderului principal
+long long print_search_folder_header(const char* path){
+    struct dirent *dent;
+    DIR* srcdir = opendir(path);
+    struct stat global_dir_stat; // info despre primul folder
+    char* absolute_path= realpath(path,NULL);
+    long long folder_size = count_path_size(absolute_path);
+    //afisam prima linie: "Path   Usage   Size   Amount"
+    if((dent = readdir(srcdir)) != 0){
+        printf("Path    Usage   Size    Amount\n");
+        printf("%s 100%% %lld\n",absolute_path,folder_size);
+        printf("|\n");
+    }
+    free(absolute_path);
+    closedir(srcdir);
+    return folder_size;
+}
+
+void proc_print(int id){
+
+    /// DE MUTAT IN ADD
+    struct process_data_s data;
+    long long global_folder_size;
+    global_folder_size = print_search_folder_header("flutter"); // afiseaza header-ul cautarii, trebuie inlocuit
+    search_folder("flutter","",global_folder_size,&data,1);
+    
+    // read_proc_info_list();
+    // process_info_t* info = find_process_info(id);
+
+    //process_data_t data;
+    // int fd = read_proc_data_lock(info->filename, &data);
+    // if(data.status == STATUS_DONE){
+    //     char buff[1024];
+    //     size_t len = 1024;
+    //     FILE* fp = fdopen(fd, "r");
+    //     for(int i = 0; i < data.line_num; i++){
+    //         //CHECK(getdelim(&buff, &len, '\n', fp));
+    //         //fgets(buff, sizeof(buff));
+    //         if(getline(&buff, &len, fp) > 0)
+    //             printf("%s", buff);
+    //     }
+    // }
+    // close_and_unlock(fd);
 }
 
 void proc_list(){
@@ -333,25 +395,28 @@ void write_proc_data_message(process_data_t* data, char* fmt, ...){
 
 
 /// Cauta recursiv pornind de la 'global_path'
-int search_folder(const char* global_path, 
-    const char* local_path, 
+int search_folder(const char* local_path, 
     const char* dirname, 
-    long long prev_folder_size, 
-    struct process_data_s* process_data,
+    long long global_folder_size, 
+    struct process_data_s *process_data,
     int is_root_folder
 ){
 
     struct dirent *dent;
-    int dir_count = 0;
     DIR* srcdir = opendir(local_path);
     if(!srcdir){
         perror("opendir");
         return -1;
     }
+    int total_file_size = 0;
+    char* relative_path = malloc(256);
+    char* next_folder = malloc(256);
     while((dent = readdir(srcdir)) != 0){
+        memset(relative_path,256,0);
+        memset(next_folder,256,0);
         struct stat dir_stat;
-
-        if(dent->d_name[0] == '.')
+        
+        if((strcmp(dent->d_name,".") == 0) || (strcmp(dent->d_name, "..") == 0))
             continue;
 
         // Folosim 'fstatat' in loc de 'stat' deoarece avem de a face cu folder
@@ -359,30 +424,34 @@ int search_folder(const char* global_path,
             perror(dent->d_name);
             continue;
         }
-        char relative_path[256];
-        strcpy(relative_path, dirname);
+        
+        strcpy(relative_path, local_path);
         strcat(relative_path,"/");
         strcat(relative_path,dent->d_name);
         if(S_ISDIR(dir_stat.st_mode)){
-            // if(!strcmp(global_path,local_path)){
-            if(is_root_folder){
-                printf("Path    Usage   Size    Amount\n");
-                printf("%s 100%% %ld\n",global_path,dir_stat.st_size);
-                printf("|\n");
-            }
-            else{
-                long int current_percentage = (dir_stat.st_size/prev_folder_size)*100;
-                printf("|-/%s %ld%% %ld \n",relative_path, current_percentage ,dir_stat.st_size);
-            }
-            dir_count++;
-            char next_folder[128];
             strcpy(next_folder,local_path);
             strcat(next_folder,"/");
             strcat(next_folder,dent->d_name);
-            search_folder(global_path, next_folder,dent->d_name,dir_stat.st_size,process_data,0);
+            int this_folder_size = search_folder(next_folder,dent->d_name,global_folder_size,process_data,0);
+            process_data->dirs++;
+            float current_percentage = ((float)this_folder_size/(float)global_folder_size)*100;
+            //write_proc_data_message();
+            // printf("|-/%s %.2f%% %d \n",relative_path,current_percentage ,this_folder_size);
+            write_proc_data_message(process_data,"|-/%s %.2f%% %d \n",relative_path,current_percentage ,this_folder_size);
+        }
+        else{
+            total_file_size += dir_stat.st_size;
+        //incrementam numarul de fisiere
+            // long int current_percentage = (dir_stat.st_size/prev_folder_size)*100;
+            // printf("FILE : |-/%s %lld%% %ld \n",relative_path, current_percentage ,dir_stat.st_size);
+            process_data->progress += dir_stat.st_size;
+            process_data->files++;
         }
     }
+    free(relative_path);
+    free(next_folder);
     closedir(srcdir);
+    return total_file_size;
 }
 
 void check_file(const char* path){

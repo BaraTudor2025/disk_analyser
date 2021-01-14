@@ -86,8 +86,12 @@ char* str_priority(int prio){
 
 // populeaza s_proc_ids
 void read_proc_info_list(){
-    mkdir("~/.da_cache_d", S_IRUSR | S_IWUSR); // nu-l face de doua ori, daca exista atunci ret==-1
-    CHECK(s_fd = open(PROC_LIST_FILENAME, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR));
+    char path[PATH_MAX];
+    realpath("~/.da_cache_d", path);
+    mkdir(path, S_IRUSR | S_IWUSR); // nu-l face de doua ori, daca exista atunci ret==-1
+
+    realpath(PROC_LIST_FILENAME, path);
+    CHECK(s_fd = open(path, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR));
     int read_bytes;
     CHECK(read_bytes = read(s_fd, &s_proc_num, sizeof(s_proc_num)));
     if(read_bytes == 0){
@@ -153,7 +157,6 @@ void write_proc_data(char* filename, const process_data_t* data){
 
 void proc_add(const char* p, int priority){
 
-    //deoarece malloc aloca memorie nu trebuie dat free, programul da exit rapid
     char *path=realpath(p, NULL);
     if (path == NULL)
     {
@@ -189,10 +192,10 @@ void proc_add(const char* p, int priority){
         CHECK(close(fd));
         printf("Created analysis task with ID '%d', for '%s' and priority %s", proc_data.info.proc_id, proc_data.info.path, str_priority(proc_data.priority));
         write_proc_data(proc_data.info.filename, &proc_data);
+        free(path);
         // TODO apel functie de analiza
         //search_folder()
     }
-
     else { // parent/main
         s_proc_list[s_proc_num].proc_id = pid;
         strcpy(s_proc_list[s_proc_num].path, path);
@@ -275,7 +278,6 @@ void proc_remove(int id){
                 break;
             }
         }
-
         for(int i = index; i < s_proc_num - 1; i++){
             s_proc_list[i].proc_id = s_proc_list[i++].proc_id;
             strcpy(s_proc_list[i].path, s_proc_list[i++].path);
@@ -352,7 +354,6 @@ long long print_search_folder_header(const char* path){
 }
 
 void proc_print(int id){
-
     /// DE MUTAT IN ADD
     struct process_data_s data;
     long long global_folder_size;
@@ -394,6 +395,7 @@ void proc_list(){
 void write_proc_data_message(process_data_t* data, char* fmt, ...){
     va_list args;
     va_start(args, fmt);
+    write_proc_data(data->info.filename, data);
     int fd = open(data->info.filename, O_WRONLY | O_APPEND);
     CHECK(flock(fd, LOCK_EX));
     FILE* fp = fdopen(fd, "a");
@@ -404,7 +406,6 @@ void write_proc_data_message(process_data_t* data, char* fmt, ...){
     va_end(args);
     data->line_num++;
 }
-
 
 /// Cauta recursiv pornind de la 'global_path'
 int search_folder(const char* local_path,

@@ -86,8 +86,12 @@ char* str_priority(int prio){
 
 // populeaza s_proc_ids
 void read_proc_info_list(){
-    mkdir("~/.da_cache_d", S_IRUSR | S_IWUSR); // nu-l face de doua ori, daca exista atunci ret==-1
-    CHECK(s_fd = open(PROC_LIST_FILENAME, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR));
+    char path[PATH_MAX];
+    realpath("~/.da_cache_d", path);
+    mkdir(path, 700); // nu-l face de doua ori, daca exista atunci ret==-1
+
+    realpath(PROC_LIST_FILENAME, path);
+    CHECK(s_fd = open(path, O_RDWR | O_CREAT, 700));
     int read_bytes;
     CHECK(read_bytes = read(s_fd, &s_proc_num, sizeof(s_proc_num)));
     if(read_bytes == 0){
@@ -385,7 +389,12 @@ void proc_list(){
         process_info_t* info = &s_proc_list[i];
         process_data_t data;
     	read_proc_data(info->filename, &data);
-        printf("id=%d path=%s progress=%d percent %d files %d dirs\n", info->proc_id, info->path, data.progress, data.files, data.dirs);
+       
+        printf( "%-7s %-3s %-4s %-15s %-s %-30s\n", "ID", "PRI", "Done" , "Status", "Details", "Path");
+        for(i=0; i<s_proc_num; i++)
+        {
+        	printf("%-7d %-3s %-d%% %-10s %-3d files %-2d dirs %-30s\n",info->proc_id, str_priority(data.priority), data.progress,str_status(data.status), data.files, data.dirs, info->path);
+        }
     }
 }
 

@@ -54,12 +54,35 @@ typedef struct process_data_s {
 } process_data_t;
 
 int search_folder(
-    const char* local_path, 
-    const char* dirname, 
-    long long prev_folder_size, 
+    const char* local_path,
+    const char* dirname,
+    long long prev_folder_size,
     struct process_data_s* process_data,
     int is_root_folder
 );
+
+char* str_status(enum status status){
+    switch(status){
+    case STATUS_DONE:
+        return "done";
+    case STATUS_PENDING:
+        return "is pending";
+    case STATUS_PROGRESS:
+        return "in progress";
+    }
+}
+
+char* str_priority(int prio){
+    switch(prio){
+    case 0:
+    case 1:
+        return "low";
+    case 2:
+        return "normal";
+    default: // prio >= 3
+        return "high";
+    }
+}
 
 // populeaza s_proc_ids
 void read_proc_info_list(){
@@ -91,7 +114,7 @@ process_info_t* find_process_info(int id){
     for(int i = 0; i < s_proc_num; i++)
         if(s_proc_list[i].proc_id == id)
             return &s_proc_list[i];
-    printf("Nu exista task-ul cu ID '%d'\n", id);
+    printf("No existing analysis for task ID '%d'\n", id);
     exit(-1);
 }
 
@@ -164,6 +187,7 @@ void proc_add(const char* p, int priority){
         int fd;
         CHECK(fd = creat(proc_data.info.filename, S_IRUSR | S_IWUSR));
         CHECK(close(fd));
+        printf("Created analysis task with ID '%d', for '%s' and priority %s", proc_data.info.proc_id, proc_data.info.path, str_priority(proc_data.priority));
         write_proc_data(proc_data.info.filename, &proc_data);
         // TODO apel functie de analiza
         //search_folder()
@@ -215,25 +239,26 @@ void proc_resume(int id){
     case STATUS_PENDING:
         data.status = STATUS_PROGRESS;
         CHECK(write(fd, &data, sizeof(data)));
-        close(fd);
-        kill(info->proc_id, SIGCONT);
+        CHECK(close(fd));
+        CHECK(kill(info->proc_id, SIGCONT));
+        printf("Suspended task with ID '%d' for '%s'\n", info->proc_id, info->path);
         break;
     case STATUS_PROGRESS:
-        printf("\n");
+        printf("Task for '%s' is already in progress\n", info->path);
         break;
     case STATUS_DONE:
-        printf("\n");
+        printf("Task for '%s' is already done\n", info->path);
         break;
     }
-
 }
 
 void proc_remove(int id){
     read_proc_info_list();
     process_info_t* info = find_process_info(id);
     process_data_t data;
-    int fd = open(info->filename, O_RDONLY);
-    CHECK(read(fd, &data, sizeof(data)));
+    int fd = read_proc_data_lock(info->filename, &data);
+    /* int fd = open(info->filename, O_RDONLY); */
+    /* CHECK(read(fd, &data, sizeof(data))); */
 
     switch(data.status)
     {
@@ -241,6 +266,7 @@ void proc_remove(int id){
     case STATUS_PROGRESS:
         kill(info->proc_id, SIGTERM);
     case STATUS_DONE:
+        close_and_unlock(fd);
         unlink(info->filename);
         int index = 0;
         for(int i = 0; i < s_proc_num; i++){
@@ -257,30 +283,16 @@ void proc_remove(int id){
         }
         s_proc_num -= 1;
         write_proc_info_list();
+        printf("Removed analysis task with ID '%d', status '%s' for '%s'\n", data.info.proc_id, str_status(data.status), data.info.path);
     }
-    printf("\n");
 }
 
 void proc_info(int id){
 	read_proc_info_list();
 	process_info_t* info = find_process_info(id);
-
 	process_data_t data;
-    int fd = read_proc_data_lock(info->filename, &data);
-
-    if (data.status == 0 )
-    {
-    	printf("Statusul analizei este pending\n");
-    }
-    if (data.status == 1 )
-    {
-    	printf("Statusul analizei  este progress\n");
-    }
-    if (data.status == 2 )
-    {
-    	printf("Statusul analizei este done\n");
-    }
-    close_and_unlock(fd);
+    read_proc_data(info->filename, &data);
+    printf("Status '%s' for '%s'\n", str_status(data.status), data.info.path);
 }
 
 long long count_path_size(const char* local_path){
@@ -304,7 +316,7 @@ long long count_path_size(const char* local_path){
             perror(dent->d_name);
             continue;
         }
-        
+
         if(S_ISDIR(dir_stat.st_mode)){
             char next_folder[256];
             strcpy(next_folder,local_path);
@@ -346,7 +358,7 @@ void proc_print(int id){
     long long global_folder_size;
     global_folder_size = print_search_folder_header("flutter"); // afiseaza header-ul cautarii, trebuie inlocuit
     search_folder("flutter","",global_folder_size,&data,1);
-    
+
     // read_proc_info_list();
     // process_info_t* info = find_process_info(id);
 
@@ -368,12 +380,12 @@ void proc_print(int id){
 
 void proc_list(){
     read_proc_info_list();
+    //printf("%");
     for(int i=0; i<s_proc_num; i++){
         process_info_t* info = &s_proc_list[i];
         process_data_t data;
-    	int fd = read_proc_data_lock(info->filename, &data);
+    	read_proc_data(info->filename, &data);
         printf("id=%d path=%s progress=%d percent %d files %d dirs\n", info->proc_id, info->path, data.progress, data.files, data.dirs);
-        close_and_unlock (fd);
     }
 }
 
@@ -395,9 +407,9 @@ void write_proc_data_message(process_data_t* data, char* fmt, ...){
 
 
 /// Cauta recursiv pornind de la 'global_path'
-int search_folder(const char* local_path, 
-    const char* dirname, 
-    long long global_folder_size, 
+int search_folder(const char* local_path,
+    const char* dirname,
+    long long global_folder_size,
     struct process_data_s *process_data,
     int is_root_folder
 ){
@@ -415,7 +427,7 @@ int search_folder(const char* local_path,
         memset(relative_path,256,0);
         memset(next_folder,256,0);
         struct stat dir_stat;
-        
+
         if((strcmp(dent->d_name,".") == 0) || (strcmp(dent->d_name, "..") == 0))
             continue;
 
@@ -424,7 +436,7 @@ int search_folder(const char* local_path,
             perror(dent->d_name);
             continue;
         }
-        
+
         strcpy(relative_path, local_path);
         strcat(relative_path,"/");
         strcat(relative_path,dent->d_name);

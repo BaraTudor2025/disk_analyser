@@ -381,17 +381,12 @@ void proc_print(int id){
 
 void proc_list(){
     read_proc_info_list();
-    //printf("%");
+    printf( "%-7s %-3s %-4s %-15s %-s %-30s\n", "ID", "PRI", "Done" , "Status", "Details", "Path");
     for(int i=0; i<s_proc_num; i++){
         process_info_t* info = &s_proc_list[i];
         process_data_t data;
     	read_proc_data(info->filename, &data);
-       
-        printf( "%-7s %-3s %-4s %-15s %-s %-30s\n", "ID", "PRI", "Done" , "Status", "Details", "Path");
-        for(i=0; i<s_proc_num; i++)
-        {
-        	printf("%-7d %-3s %-d%% %-10s %-3d files %-2d dirs %-30s\n",info->proc_id, str_priority(data.priority), data.progress,str_status(data.status), data.files, data.dirs, info->path);
-        }
+        printf("%-7d %-3s %-d%% %-10s %-3d files %-2d dirs %-30s\n",info->proc_id, str_priority(data.priority), data.progress,str_status(data.status), data.files, data.dirs, info->path);
     }
 }
 

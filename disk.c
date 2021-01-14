@@ -194,7 +194,10 @@ void proc_add(const char* p, int priority){
         write_proc_data(proc_data.info.filename, &proc_data);
         free(path);
         // TODO apel functie de analiza
-        //search_folder()
+        // struct process_data_s data;
+        // long long global_folder_size;
+        // global_folder_size = print_search_folder_header("test");
+        // search_folder("test","",global_folder_size,&data,1);
     }
     else { // parent/main
         s_proc_list[s_proc_num].proc_id = pid;
@@ -353,30 +356,40 @@ long long print_search_folder_header(const char* path){
     return folder_size;
 }
 
+void proc_print_recursively(int i, int limit, char** buff, size_t* len, FILE* fp){
+    if(i<limit)
+        proc_print_recursively(i+1,limit,buff,len,fp);
+    CHECK(getdelim(&buff, &len, '\n', fp));
+        //fgets(buff, sizeof(buff));
+    if(getline(buff, len, fp) > 0)
+        printf("%s", *buff);
+}
+
 void proc_print(int id){
     /// DE MUTAT IN ADD
     struct process_data_s data;
     long long global_folder_size;
-    global_folder_size = print_search_folder_header("flutter"); // afiseaza header-ul cautarii, trebuie inlocuit
-    search_folder("flutter","",global_folder_size,&data,1);
+    global_folder_size = print_search_folder_header("test"); // afiseaza header-ul cautarii, trebuie inlocuit
+    search_folder("test","",global_folder_size,&data,1);
 
-    // read_proc_info_list();
-    // process_info_t* info = find_process_info(id);
+    read_proc_info_list();
+    process_info_t* info = find_process_info(id);
 
-    //process_data_t data;
-    // int fd = read_proc_data_lock(info->filename, &data);
-    // if(data.status == STATUS_DONE){
-    //     char buff[1024];
-    //     size_t len = 1024;
-    //     FILE* fp = fdopen(fd, "r");
-    //     for(int i = 0; i < data.line_num; i++){
-    //         //CHECK(getdelim(&buff, &len, '\n', fp));
-    //         //fgets(buff, sizeof(buff));
-    //         if(getline(&buff, &len, fp) > 0)
-    //             printf("%s", buff);
-    //     }
-    // }
-    // close_and_unlock(fd);
+    process_data_t data;
+    int fd = read_proc_data_lock(info->filename, &data);
+    if(data.status == STATUS_DONE){
+        char buff[1024];
+        size_t len = 1024;
+        FILE* fp = fdopen(fd, "r");
+        // for(int i = 0; i < data.line_num; i++){
+        //     //CHECK(getdelim(&buff, &len, '\n', fp));
+        //     //fgets(buff, sizeof(buff));
+        //     if(getline(&buff, &len, fp) > 0)
+        //         printf("%s", buff);
+        // }
+        proc_print_recursively(0,data.line_num,&buff,&len,fp);
+    }
+    close_and_unlock(fd);
 }
 
 void proc_list(){
@@ -423,10 +436,10 @@ int search_folder(const char* local_path,
     }
     int total_file_size = 0;
     char* relative_path = malloc(256);
-    char* next_folder = malloc(256);
+    // char* next_folder = malloc(256);
     while((dent = readdir(srcdir)) != 0){
-        memset(relative_path,256,0);
-        memset(next_folder,256,0);
+        memset(relative_path,0,256);
+        // memset(next_folder,0,256);
         struct stat dir_stat;
 
         if((strcmp(dent->d_name,".") == 0) || (strcmp(dent->d_name, "..") == 0))
@@ -437,20 +450,25 @@ int search_folder(const char* local_path,
             perror(dent->d_name);
             continue;
         }
+        if(is_root_folder > 1){
 
-        strcpy(relative_path, local_path);
-        strcat(relative_path,"/");
+            strcpy(relative_path, local_path);
+            strcat(relative_path,"/");
+        }
         strcat(relative_path,dent->d_name);
         if(S_ISDIR(dir_stat.st_mode)){
-            strcpy(next_folder,local_path);
-            strcat(next_folder,"/");
-            strcat(next_folder,dent->d_name);
-            int this_folder_size = search_folder(next_folder,dent->d_name,global_folder_size,process_data,0);
+            // strcpy(next_folder,local_path);
+            // strcat(next_folder,"/");
+            // strcat(next_folder,dent->d_name);
+            int this_folder_size = search_folder(relative_path,dent->d_name,global_folder_size,process_data,is_root_folder+1);
             process_data->dirs++;
             float current_percentage = ((float)this_folder_size/(float)global_folder_size)*100;
             //write_proc_data_message();
-            // printf("|-/%s %.2f%% %d \n",relative_path,current_percentage ,this_folder_size);
-            write_proc_data_message(process_data,"|-/%s %.2f%% %d \n",relative_path,current_percentage ,this_folder_size);
+            char* hashtags = calloc(52,1);
+            for(int i = 0; i< (int)current_percentage/2+1; i++)
+                hashtags[i] = '#';
+            printf("|-/%s %.2f%% %d %s\n",relative_path,current_percentage ,this_folder_size, hashtags);            // write_proc_data_message(process_data,"|-/%s %.2f%% %d \n",relative_path,current_percentage ,this_folder_size);
+            free(hashtags);
         }
         else{
             total_file_size += dir_stat.st_size;
@@ -462,7 +480,7 @@ int search_folder(const char* local_path,
         }
     }
     free(relative_path);
-    free(next_folder);
+    // free(next_folder);
     closedir(srcdir);
     return total_file_size;
 }

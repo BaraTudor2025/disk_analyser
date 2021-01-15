@@ -114,7 +114,7 @@ void read_proc_info_list(){
         mkdir(s_proc_folder, 0777);
     //realpath(PROC_LIST_FILENAME, path);
     //CHECK(s_fd = open(path, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR));
-    CHECK(s_fd = open(PROC_LIST_FILENAME, O_RDWR | O_CREAT));
+    CHECK(s_fd = open(PROC_LIST_FILENAME, O_RDONLY | O_CREAT));
     int read_bytes;
     CHECK(read_bytes = read(s_fd, &s_proc_num, sizeof(s_proc_num)));
     if(read_bytes == 0){
@@ -125,19 +125,16 @@ void read_proc_info_list(){
             CHECK(read(s_fd, &s_proc_list[i], sizeof (process_info_t)));
         }
     }
+    close(s_fd);
 }
 
 void write_proc_info_list(){
-    if(s_proc_num == 0){
-        close(s_fd);
-        close(open(PROC_LIST_FILENAME, O_WRONLY | O_TRUNC));
-        return;
-    }
-    lseek(s_fd, 0, SEEK_SET);
+    int fd = open(PROC_LIST_FILENAME, O_WRONLY | O_TRUNC);
     CHECK(write(s_fd, &s_proc_num, sizeof(s_proc_num)));
     for(int i = 0; i < s_proc_num; i++){
         CHECK(write(s_fd, &s_proc_list[i], sizeof (process_info_t)));
     }
+    close(fd);
 }
 
 process_info_t* find_process_info(int id){
@@ -307,12 +304,12 @@ void proc_remove(int id){
         unlink(info->filename);
         int index = 0;
         for(int i = 0; i < s_proc_num; i++){
-            if(info->proc_id == id){
+            if(s_proc_list[i].proc_id == id){
                 index = i;
                 break;
             }
         }
-        for(int i = index; i < s_proc_num; i++){
+        for(int i = index; i < s_proc_num - 1; i++){
             s_proc_list[i].proc_id = s_proc_list[i++].proc_id;
             strcpy(s_proc_list[i].path, s_proc_list[i++].path);
             strcpy(s_proc_list[i].filename, s_proc_list[i++].filename);

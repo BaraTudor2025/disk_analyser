@@ -423,7 +423,7 @@ void proc_list(){
         printf("No analysis found\n");
         return;
     }
-    printf( "%-7s %-3s %-4s %-15s %-s %-30s\n", "ID", "PRI", "Done" , "Status", "Details", "Path");
+    printf( "%-7s %-3s %-4s %-10s %-22s %-25s\n", "ID", "PRI", "Done" , "Status", "Details", "Path");
     for(int i=0; i<s_proc_num; i++){
         process_info_t* info = &s_proc_list[i];
         process_data_t data;
@@ -432,7 +432,7 @@ void proc_list(){
         memset(prio, 0, 4);
         for(int i=0; i<data.priority; i++)
             prio[i] = '*';
-        printf("%-7d %-3s %-d%% %-10s %-3d files %-2d dirs %-30s\n",info->proc_id, prio, data.progress, str_status(data.status), data.files, data.dirs, info->path);
+        printf("%-7d %-3s %-d%% %-10s %-4d files %-3d dirs %-30s\n",info->proc_id, prio, data.progress, str_status(data.status), data.files, data.dirs, info->path);
     }
 }
 

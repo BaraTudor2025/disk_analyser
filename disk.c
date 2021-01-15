@@ -466,7 +466,7 @@ int search_folder(const char* local_path,
     DIR* srcdir = opendir(local_path);
     if(!srcdir){
         perror("opendir");
-        return -1;
+        return 0;
     }
     int total_file_size = 0;
     char* relative_path = malloc(256);
@@ -481,7 +481,7 @@ int search_folder(const char* local_path,
 
         // Folosim 'fstatat' in loc de 'stat' deoarece avem de a face cu folder
         if(fstatat(dirfd(srcdir), dent->d_name, &dir_stat,0) < 0){
-            perror(dent->d_name);
+            //perror(dent->d_name);
             continue;
         }
         strcpy(relative_path, local_path);
@@ -524,7 +524,7 @@ long long count_path_size(const char* local_path){
     DIR* srcdir = opendir(local_path);
     if(!srcdir){
         perror("opendir");
-        return -1;
+        return 0;
     }
     int this_dir_size = 0;
     // char* next_folder = malloc(256);
@@ -537,7 +537,7 @@ long long count_path_size(const char* local_path){
 
         // Folosim 'fstatat' in loc de 'stat' deoarece avem de a face cu folder
         if(fstatat(dirfd(srcdir), dent->d_name, &dir_stat,0) < 0){
-            perror(dent->d_name);
+            //perror(dent->d_name);
             continue;
         }
 

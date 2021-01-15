@@ -65,7 +65,6 @@ int search_folder(
     struct process_data_s* process_data,
     int is_root_folder
 );
-long long print_search_folder_header(const char* path);
 long long count_path_size(const char* local_path);
 
 char* str_status(enum status status){
@@ -342,7 +341,7 @@ char* format_size(int value){
     else if(value<1048576){
         sprintf(s_size_int_to_string,"%d.%dKB",value/1024,value%1024/102);
         return s_size_int_to_string;
-        
+
     }
     else if(value<1099511627776)
     {
@@ -353,48 +352,22 @@ char* format_size(int value){
         sprintf(s_size_int_to_string,"%dTB",value);
         return s_size_int_to_string;
     }
-    
+
 }
 
-
-
-// Afiseaza headerul procesului si returneaza dimensiunea folderului principal
-long long print_search_folder_header(const char* path){
-    struct dirent *dent;
-    DIR* srcdir = opendir(path);
-    struct stat global_dir_stat; // info despre primul folder
-    char* absolute_path= realpath(path,NULL);
-    long long folder_size = count_path_size(absolute_path);
-    //afisam prima linie: "Path   Usage   Size   Amount"
-    if((dent = readdir(srcdir)) != 0){
-        printf("Path    Usage   Size    Amount\n");
-        printf("%s 100%% %lld\n",absolute_path,folder_size);
-        printf("|\n");
-    }
-    free(absolute_path);
-    closedir(srcdir);
-    return folder_size;
+void proc_print_recursively(int i, int limit, FILE* fp){
+    char* buff = NULL;
+    size_t len;
+    int ret = getline(&buff, &len, fp);
+    if(i < limit)
+        proc_print_recursively(i + 1, limit, fp);
+    if(ret > 0)
+        printf("%s", buff);
 }
-
-/* void proc_print_recursively(int i, int limit, char** buff, size_t* len, FILE* fp){ */
-/*     if(i<limit) */
-/*         proc_print_recursively(i+1,limit,buff,len,fp); */
-/*     CHECK(getdelim(&buff, &len, '\n', fp)); */
-/*         //fgets(buff, sizeof(buff)); */
-/*     if(getline(buff, len, fp) > 0) */
-/*         printf("%s", *buff); */
-/* } */
 
 void proc_print(int id){
-    /// DE MUTAT IN ADD
-    // struct process_data_s data;
-    // long long global_folder_size;
-    // global_folder_size = print_search_folder_header("test"); // afiseaza header-ul cautarii, trebuie inlocuit
-    // search_folder("test","",global_folder_size,&data,1);
-
     read_proc_info_list();
     process_info_t* info = find_process_info(id);
-
     process_data_t data;
     int fd = read_proc_data_lock(info->filename, &data);
     printf("Path    Usage   Size    Amount\n");
@@ -404,15 +377,8 @@ void proc_print(int id){
     }
     printf("|\n");
     if(data.status == STATUS_DONE){
-        char* buff = NULL;
-        size_t len = 0;
         FILE* fp = fdopen(fd, "r");
-        for(int i = 0; i < data.line_num; i++){
-            if(getline(&buff, &len, fp) > 0){
-                printf("%s", buff);
-            }
-        }
-        //proc_print_recursively(0,data.line_num,&buff,&len,fp);
+        proc_print_recursively(0, data.line_num, fp);
     }
     close_and_unlock(fd);
 }
@@ -492,6 +458,7 @@ int search_folder(const char* local_path,
             // strcat(next_folder,"/");
             // strcat(next_folder,dent->d_name);
             int this_folder_size = search_folder(relative_path,dent->d_name,global_folder_size,process_data,is_root_folder+1);
+            total_file_size += this_folder_size;
             process_data->dirs++;
             float current_percentage = ((float)this_folder_size/(float)global_folder_size)*100;
             //write_proc_data_message();
@@ -499,7 +466,7 @@ int search_folder(const char* local_path,
             for(int i = 0; i< (int)current_percentage/2+1; i++)
                 hashtags[i] = '#';
             //printf("|-/%s %.2f%% %d %s\n",relative_path,current_percentage ,this_folder_size, hashtags);
-            write_proc_data_message(process_data,"|-%s %.2f%% %s \n",relative_path+process_data->path_size,current_percentage ,format_size(this_folder_size));
+            write_proc_data_message(process_data,"|-%s %.2f%% %s %s \n",relative_path+process_data->path_size,current_percentage ,format_size(this_folder_size), hashtags);
             free(hashtags);
         }
         else{

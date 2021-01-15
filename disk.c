@@ -52,8 +52,10 @@ typedef struct process_data_s {
     enum status status; // pending | in progress | done
     int files;
     long long total_size;
+    int current_size; // cat s a citit pana in momentul asta din total
     int dirs;
     int line_num; // numarul de linii pe care il contine mesajul afisat prin --print <id>
+    int path_size; // cate caractere are path-ul
 } process_data_t;
 
 int search_folder(
@@ -128,16 +130,22 @@ void read_proc_info_list(){
 }
 
 void write_proc_info_list(){
-    if(s_proc_num == 0){
-        close(s_fd);
-        close(open(PROC_LIST_FILENAME, O_WRONLY | O_TRUNC));
-        return;
-    }
-    lseek(s_fd, 0, SEEK_SET);
-    CHECK(write(s_fd, &s_proc_num, sizeof(s_proc_num)));
+    // if(s_proc_num == 0){
+    //     close(s_fd);
+    //     close(open(PROC_LIST_FILENAME, O_WRONLY | O_TRUNC));
+    //     return;
+    // }
+    // lseek(s_fd, 0, SEEK_SET);
+    // CHECK(write(s_fd, &s_proc_num, sizeof(s_proc_num)));
+    // for(int i = 0; i < s_proc_num; i++){
+    //     CHECK(write(s_fd, &s_proc_list[i], sizeof (process_info_t)));
+    // }
+    int fd = open(PROC_LIST_FILENAME, O_WRONLY | O_TRUNC);
+    CHECK(write(fd, &s_proc_num, sizeof(s_proc_num)));
     for(int i = 0; i < s_proc_num; i++){
-        CHECK(write(s_fd, &s_proc_list[i], sizeof (process_info_t)));
+        CHECK(write(fd, &s_proc_list[i], sizeof (process_info_t)));
     }
+    close(fd);
 }
 
 process_info_t* find_process_info(int id){
@@ -215,6 +223,7 @@ void proc_add(const char* p, int priority){
         proc_data.info.proc_id = getpid();
         set_task_filename(proc_data.info.filename, getpid());
         strcpy(proc_data.info.path, path);
+        proc_data.path_size = strlen(path);
         proc_data.priority = priority;
         proc_data.status = STATUS_PROGRESS;
         setpriority(PRIO_PROCESS, proc_data.info.proc_id, proc_data.priority);
@@ -307,15 +316,15 @@ void proc_remove(int id){
         unlink(info->filename);
         int index = 0;
         for(int i = 0; i < s_proc_num; i++){
-            if(info->proc_id == id){
+            if(s_proc_list[i].proc_id == id){
                 index = i;
                 break;
             }
         }
-        for(int i = index; i < s_proc_num; i++){
-            s_proc_list[i].proc_id = s_proc_list[i++].proc_id;
-            strcpy(s_proc_list[i].path, s_proc_list[i++].path);
-            strcpy(s_proc_list[i].filename, s_proc_list[i++].filename);
+        for(int i = index; i < s_proc_num-1; i++){
+            s_proc_list[i].proc_id = s_proc_list[i+1].proc_id;
+            strcpy(s_proc_list[i].path, s_proc_list[i+1].path);
+            strcpy(s_proc_list[i].filename, s_proc_list[i+1].filename);
         }
         s_proc_num -= 1;
         write_proc_info_list();
@@ -331,6 +340,86 @@ void proc_info(int id){
     printf("Status '%s' for '%s'\n", str_status(data.status), data.info.path);
 }
 
+char s_size_int_to_string[30];
+// Ia marimea fisierului si returneaza pe formatul "5,4MB"
+char* format_size(int value){
+    memset(s_size_int_to_string, 0, 30);
+    if(value<1024){
+        sprintf(s_size_int_to_string,"%dB",value);
+        return s_size_int_to_string;
+    }
+    else if(value<1048576){
+        sprintf(s_size_int_to_string,"%d.%dKB",value/1024,value%1024/102);
+        return s_size_int_to_string;
+        
+    }
+    else if(value<1099511627776)
+    {
+        sprintf(s_size_int_to_string,"%d.%dMB",value/1048576,value%1048576/104857);
+        return s_size_int_to_string;
+    }
+    else{
+        sprintf(s_size_int_to_string,"%dTB",value);
+        return s_size_int_to_string;
+    }
+    
+}
+
+long long count_path_size(const char* local_path){
+    struct dirent *dent;
+    DIR* srcdir = opendir(local_path);
+    if(!srcdir){
+        perror("opendir");
+        return -1;
+    }
+    int this_dir_size = 0;
+    // char* next_folder = malloc(256);
+    while((dent = readdir(srcdir)) != 0){
+        // memset(next_folder,256,0);
+        //printf("%s\n",dent->d_name);
+        struct stat dir_stat;
+        if((strcmp(dent->d_name,".") == 0) || (strcmp(dent->d_name, "..") == 0))
+            continue;
+
+        // Folosim 'fstatat' in loc de 'stat' deoarece avem de a face cu folder
+        if(fstatat(dirfd(srcdir), dent->d_name, &dir_stat,0) < 0){
+            perror(dent->d_name);
+            continue;
+        }
+
+        if(S_ISDIR(dir_stat.st_mode)){
+            char next_folder[256];
+            strcpy(next_folder,local_path);
+            strcat(next_folder,"/");
+            strcat(next_folder,dent->d_name);
+            this_dir_size += count_path_size(next_folder);
+        }
+        else{
+            this_dir_size += dir_stat.st_size;
+        }
+    }
+    // free(next_folder);
+    closedir(srcdir);
+    return this_dir_size;
+}
+
+// Afiseaza headerul procesului si returneaza dimensiunea folderului principal
+long long print_search_folder_header(const char* path){
+    struct dirent *dent;
+    DIR* srcdir = opendir(path);
+    struct stat global_dir_stat; // info despre primul folder
+    char* absolute_path= realpath(path,NULL);
+    long long folder_size = count_path_size(absolute_path);
+    //afisam prima linie: "Path   Usage   Size   Amount"
+    if((dent = readdir(srcdir)) != 0){
+        printf("Path    Usage   Size    Amount\n");
+        printf("%s 100%% %lld\n",absolute_path,folder_size);
+        printf("|\n");
+    }
+    free(absolute_path);
+    closedir(srcdir);
+    return folder_size;
+}
 
 /* void proc_print_recursively(int i, int limit, char** buff, size_t* len, FILE* fp){ */
 /*     if(i<limit) */
@@ -342,13 +431,19 @@ void proc_info(int id){
 /* } */
 
 void proc_print(int id){
+    /// DE MUTAT IN ADD
+    // struct process_data_s data;
+    // long long global_folder_size;
+    // global_folder_size = print_search_folder_header("test"); // afiseaza header-ul cautarii, trebuie inlocuit
+    // search_folder("test","",global_folder_size,&data,1);
+
     read_proc_info_list();
     process_info_t* info = find_process_info(id);
 
     process_data_t data;
     int fd = read_proc_data_lock(info->filename, &data);
     printf("Path    Usage   Size    Amount\n");
-    printf("%s 100%% %lld ", data.info.path, data.total_size);
+    printf("%s 100%% %s ", data.info.path, format_size(data.total_size));
     for(int i=0; i<50; i++){
         printf("#");
     }
@@ -403,6 +498,7 @@ void write_proc_data_message(process_data_t* data, char* fmt, ...){
     va_end(args);
 }
 
+
 /// Cauta recursiv pornind de la 'global_path'
 int search_folder(const char* local_path,
     const char* dirname,
@@ -448,7 +544,7 @@ int search_folder(const char* local_path,
             for(int i = 0; i< (int)current_percentage/2+1; i++)
                 hashtags[i] = '#';
             //printf("|-/%s %.2f%% %d %s\n",relative_path,current_percentage ,this_folder_size, hashtags);
-            write_proc_data_message(process_data,"|-/%s %.2f%% %d \n",relative_path,current_percentage ,this_folder_size);
+            write_proc_data_message(process_data,"|-%s %.2f%% %s \n",relative_path+process_data->path_size,current_percentage ,format_size(this_folder_size));
             free(hashtags);
         }
         else{
@@ -456,7 +552,8 @@ int search_folder(const char* local_path,
         //incrementam numarul de fisiere
             // long int current_percentage = (dir_stat.st_size/prev_folder_size)*100;
             // printf("FILE : |-/%s %lld%% %ld \n",relative_path, current_percentage ,dir_stat.st_size);
-            process_data->progress += dir_stat.st_size;
+            process_data->current_size += dir_stat.st_size;
+            process_data->progress = ((float)process_data->current_size/(float)process_data->total_size)*100;
             process_data->files++;
         }
     }
@@ -467,42 +564,42 @@ int search_folder(const char* local_path,
 }
 
 
-long long count_path_size(const char* local_path){
-    struct dirent *dent;
-    DIR* srcdir = opendir(local_path);
-    if(!srcdir){
-        perror("opendir");
-        return -1;
-    }
-    int this_dir_size = 0;
-    // char* next_folder = malloc(256);
-    while((dent = readdir(srcdir)) != 0){
-        // memset(next_folder,256,0);
-        //printf("%s\n",dent->d_name);
-        struct stat dir_stat;
-        if((strcmp(dent->d_name,".") == 0) || (strcmp(dent->d_name, "..") == 0))
-            continue;
+// long long count_path_size(const char* local_path){
+//     struct dirent *dent;
+//     DIR* srcdir = opendir(local_path);
+//     if(!srcdir){
+//         perror("opendir");
+//         return -1;
+//     }
+//     int this_dir_size = 0;
+//     // char* next_folder = malloc(256);
+//     while((dent = readdir(srcdir)) != 0){
+//         // memset(next_folder,256,0);
+//         //printf("%s\n",dent->d_name);
+//         struct stat dir_stat;
+//         if((strcmp(dent->d_name,".") == 0) || (strcmp(dent->d_name, "..") == 0))
+//             continue;
 
-        // Folosim 'fstatat' in loc de 'stat' deoarece avem de a face cu folder
-        if(fstatat(dirfd(srcdir), dent->d_name, &dir_stat,0) < 0){
-            perror(dent->d_name);
-            continue;
-        }
+//         // Folosim 'fstatat' in loc de 'stat' deoarece avem de a face cu folder
+//         if(fstatat(dirfd(srcdir), dent->d_name, &dir_stat,0) < 0){
+//             perror(dent->d_name);
+//             continue;
+//         }
 
-        if(S_ISDIR(dir_stat.st_mode)){
-            char next_folder[256];
-            strcpy(next_folder,local_path);
-            strcat(next_folder,"/");
-            strcat(next_folder,dent->d_name);
-            this_dir_size += count_path_size(next_folder);
-        }
-        else{
-            this_dir_size += dir_stat.st_size;
-        }
-    }
-    // free(next_folder);
-    closedir(srcdir);
-    return this_dir_size;
-}
+//         if(S_ISDIR(dir_stat.st_mode)){
+//             char next_folder[256];
+//             strcpy(next_folder,local_path);
+//             strcat(next_folder,"/");
+//             strcat(next_folder,dent->d_name);
+//             this_dir_size += count_path_size(next_folder);
+//         }
+//         else{
+//             this_dir_size += dir_stat.st_size;
+//         }
+//     }
+//     // free(next_folder);
+//     closedir(srcdir);
+//     return this_dir_size;
+// }
 
 

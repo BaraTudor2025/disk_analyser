@@ -16,16 +16,7 @@ static const char* s_help_options =
 "-l, --list         list all analysis tasks, with their ID and the corresponding root path\n"
 "-p, --print <id>   print analysis report for those tasks that are \"done\"\n";
 
-/* enum command { */
-/*     C_ADD, C_SUSPEND, C_RESUME, C_REMOVE, C_INFO, C_LIST, C_PRINT */
-/* }; */
-/*  */
-/* typedef struct command_s { */
-/*     enum command command; */
-/*     const char* path; */
-/*     int id; */
-/*     int priority; */
-/* }command_t; */
+// link pe github https://github.com/Vector2025/disk_analyser
 
 int main(int argc, char* argv[]) {
 
